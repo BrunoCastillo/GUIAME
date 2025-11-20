@@ -1,19 +1,19 @@
 """
 Punto de entrada para Vercel serverless functions.
-Este archivo permite que Vercel ejecute FastAPI como función serverless.
+Vercel ejecutará este archivo como función serverless.
 """
 import sys
 import os
 
-# Agregar el directorio padre al path para importar app
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Agregar el directorio backend al path
+backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
+# Importar la app de FastAPI
 from app.main import app
 from mangum import Mangum
 
-# Crear handler para Vercel usando Mangum
+# Crear handler para Vercel
+# Vercel busca una variable llamada 'handler' en este módulo
 handler = Mangum(app, lifespan="off")
-
-# Exportar handler para Vercel
-# Vercel buscará este archivo en /api/index.py
-__all__ = ["handler"]
