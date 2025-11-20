@@ -9,7 +9,11 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.main import app
+from mangum import Mangum
 
-# Exportar la app para Vercel
+# Crear handler para Vercel usando Mangum
+handler = Mangum(app, lifespan="off")
+
+# Exportar handler para Vercel
 # Vercel buscará este archivo en /api/index.py
-__all__ = ["app"]
+__all__ = ["handler"]
