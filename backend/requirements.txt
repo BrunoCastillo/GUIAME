@@ -1,34 +1,56 @@
+# Dependencias optimizadas para Vercel
+# Este archivo se usa automáticamente en Vercel
+# Para desarrollo local con todas las dependencias, usa requirements-full.txt
+
+# Core FastAPI
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+mangum==0.17.0
+
+# Database
 sqlalchemy==2.0.23
 alembic==1.12.1
 psycopg2-binary==2.9.9
 pgvector==0.2.4
+
+# Configuración
 python-dotenv==1.0.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
+
+# Seguridad
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
+
+# Utilidades
 aiofiles==23.2.1
 httpx>=0.24.0,<0.25.0
-openai>=1.3.5,<2.0.0
-chromadb>=0.4.18
-langchain>=0.0.350
-langchain-community>=0.0.10
-sentence-transformers>=2.2.2
+email-validator==2.1.0
+slowapi==0.1.9
+
+# Supabase
+supabase>=2.0.3
+
+# Google APIs (opcional)
+google-auth>=2.24.0
+google-auth-oauthlib>=1.1.0
+google-api-python-client>=2.108.0
+
+# Documentos básicos (sin OCR pesado)
 PyPDF2>=3.0.1
 python-docx>=1.1.0
 python-pptx>=0.6.23
 Pillow>=10.1.0
-pytesseract>=0.3.10
+
+# Redis (opcional)
 redis>=5.0.1
 celery>=5.3.4
-supabase>=2.0.3
-google-auth==2.24.0
-google-auth-oauthlib==1.1.0
-google-api-python-client==2.108.0
-email-validator==2.1.0
-slowapi==0.1.9
-mangum==0.17.0
 
+# NOTA: Las siguientes dependencias son muy pesadas para Vercel
+# Para desarrollo local, instala desde requirements-full.txt:
+# - sentence-transformers (muy pesado, ~500MB)
+# - chromadb (pesado, ~200MB)
+# - langchain (pesado, ~100MB)
+# - pytesseract (requiere Tesseract instalado)
+# - openai (solo si usas OpenAI directamente)
