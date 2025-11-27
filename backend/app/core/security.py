@@ -5,22 +5,41 @@ JWT, hash de contraseñas, validación de tokens y sanitización.
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from app.core.config import settings
 import bleach
+import bcrypt
 
-# Contexto para hash de contraseñas
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Configuración de bcrypt
+BCRYPT_ROUNDS = 12
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verificar contraseña contra hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        # Bcrypt tiene un límite de 72 bytes, truncar si es necesario
+        password_bytes = plain_password.encode('utf-8')
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+        return bcrypt.checkpw(password_bytes, hashed_password.encode('utf-8'))
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    """Generar hash de contraseña."""
-    return pwd_context.hash(password)
+    """
+    Generar hash de contraseña usando bcrypt directamente.
+    Bcrypt tiene un límite de 72 bytes, se trunca automáticamente si es necesario.
+    """
+    # Bcrypt tiene un límite de 72 bytes para contraseñas
+    # Truncar a 72 bytes si es necesario (como sugiere la documentación de bcrypt)
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+    
+    # Generar salt y hash
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:

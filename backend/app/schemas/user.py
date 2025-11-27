@@ -11,12 +11,14 @@ from app.core.enums import Role
 class UserBase(BaseModel):
     """Esquema base de usuario."""
     email: EmailStr
-    role: Role = Role.STUDENT
+    role: Role = Role.ESTUDIANTE
 
 
-class UserCreate(UserBase):
-    """Esquema para creación de usuario."""
+class UserCreate(BaseModel):
+    """Esquema para creación de usuario (MODO DEMO - Validaciones relajadas)."""
+    email: str  # En modo demo, permite cualquier string (no solo EmailStr válido)
     password: str
+    role: Role = Role.ESTUDIANTE
     company_id: Optional[int] = None
 
 
@@ -27,9 +29,11 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class UserResponse(UserBase):
-    """Esquema de respuesta de usuario."""
+class UserResponse(BaseModel):
+    """Esquema de respuesta de usuario (MODO DEMO - Email como string)."""
     id: int
+    email: str  # En modo demo, permitir string en lugar de EmailStr
+    role: Role
     company_id: Optional[int]
     is_active: bool
     is_verified: bool

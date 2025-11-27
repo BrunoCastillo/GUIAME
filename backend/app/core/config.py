@@ -29,7 +29,44 @@ class Settings(BaseSettings):
     def get_database_url(self) -> str:
         """Obtener URL de base de datos, construyéndola si es necesario."""
         if self.DATABASE_URL:
-            return self.DATABASE_URL
+            url = self.DATABASE_URL
+            # Para Supabase, corregir hostname y agregar sslmode=require si no está presente
+            if "supabase.co" in url or "supabase.com" in url:
+                # Eliminar el prefijo "db." del hostname si está presente
+                # El hostname correcto es: gatwolhwmiaqqnjuszuh.supabase.co (sin db.)
+                import re
+                url = re.sub(r'@db\.([^.]+\.supabase\.co)', r'@\1', url)
+                
+                # Eliminar parámetros no reconocidos por psycopg2 (como pgbouncer)
+                # Estos parámetros causan errores de conexión
+                url = re.sub(r'[?&]pgbouncer=[^&]*', '', url)
+                url = re.sub(r'[?&]options=[^&]*', '', url)
+                
+                if "sslmode=" not in url:
+                    separator = "&" if "?" in url else "?"
+                    url = f"{url}{separator}sslmode=require"
+            
+            # Para Supabase Connection Pooling, el nombre de usuario debe incluir el project ID
+            # Formato: postgres.PROJECT_ID en lugar de solo postgres
+            if "pooler.supabase.com" in url:
+                project_id = "gatwolhwmiaqqnjuszuh"  # Project ID conocido
+                
+                # Extraer project ID de la URL si está presente en options
+                if "options=-cproject" in url:
+                    import urllib.parse
+                    # Decodificar URL para extraer project ID
+                    if "options=-cproject%3D" in url:
+                        project_id = urllib.parse.unquote(url.split("options=-cproject%3D")[1].split("&")[0].split("?")[0])
+                    elif "options=-cproject=" in url:
+                        project_id = url.split("options=-cproject=")[1].split("&")[0].split("?")[0]
+                
+                # Verificar si el usuario ya tiene el project ID como sufijo
+                # Formato esperado: postgres.PROJECT_ID@
+                import re
+                if f"postgres.{project_id}@" not in url and f"postgres.{project_id}:" not in url:
+                    # Reemplazar postgres: o postgres@ con postgres.PROJECT_ID
+                    url = re.sub(r'postgres([+:]?[^:]*)?([:@])', f'postgres.{project_id}\\2', url, count=1)
+            return url
         # Construir URL desde variables individuales
         if all([self.POSTGRES_USER, self.POSTGRES_PASSWORD, self.POSTGRES_HOST, self.POSTGRES_DB]):
             return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -65,8 +102,17 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
     
-    # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    # CORS - Permitir cualquier puerto de localhost para desarrollo
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:3000",
+        "http://localhost:*",  # Permitir cualquier puerto de localhost
+        "http://127.0.0.1:*",   # Permitir cualquier puerto de 127.0.0.1
+    ]
+    # En desarrollo, permitir todos los orígenes de localhost
+    # En producción, especificar los orígenes exactos
     ALLOWED_HOSTS: List[str] = ["*"]
     
     # File Storage
@@ -80,6 +126,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignorar campos extra en .env que no están definidos en el modelo
 
 
 # Crear directorio de uploads si no existe

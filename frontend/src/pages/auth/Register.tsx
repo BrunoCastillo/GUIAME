@@ -2,10 +2,19 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 
+// Opciones de roles/perfiles disponibles
+const ROLES = [
+  { value: 'estudiante', label: 'Estudiante' },
+  { value: 'profesor', label: 'Profesor' },
+  { value: 'administrador', label: 'Administrador' },
+  { value: 'company_admin', label: 'Administrador de Empresa' },
+]
+
 export default function Register() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [role, setRole] = useState('estudiante')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { register } = useAuthStore()
@@ -23,7 +32,7 @@ export default function Register() {
     setLoading(true)
 
     try {
-      await register(email, password, 'student')
+      await register(email, password, role)
       navigate('/login')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al registrar')
@@ -88,6 +97,25 @@ export default function Register() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
               />
+            </div>
+            <div>
+              <label htmlFor="role" className="block text-sm font-medium text-gray-700">
+                Perfil / Rol
+              </label>
+              <select
+                id="role"
+                name="role"
+                required
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary bg-white"
+              >
+                {ROLES.map((roleOption) => (
+                  <option key={roleOption.value} value={roleOption.value}>
+                    {roleOption.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div>

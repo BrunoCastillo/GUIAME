@@ -42,7 +42,7 @@ class CourseResponse(CourseBase):
 @router.post("/", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
 async def create_course(
     course_data: CourseCreate,
-    current_user: User = Depends(require_role([Role.COMPANY_ADMIN, Role.INSTRUCTOR])),
+    current_user: User = Depends(require_role([Role.COMPANY_ADMIN, Role.PROFESOR])),
     db: Session = Depends(get_db)
 ):
     """Crear nuevo curso."""

@@ -7,10 +7,10 @@ from enum import Enum
 
 class Role(str, Enum):
     """Roles del sistema."""
-    SYSTEM_ADMIN = "system_admin"
+    ESTUDIANTE = "estudiante"
+    PROFESOR = "profesor"
+    ADMINISTRADOR = "administrador"
     COMPANY_ADMIN = "company_admin"
-    INSTRUCTOR = "instructor"
-    STUDENT = "student"
 
 
 class DocumentType(str, Enum):

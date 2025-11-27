@@ -18,11 +18,11 @@ router = APIRouter()
 async def get_users(
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(require_role([Role.SYSTEM_ADMIN, Role.COMPANY_ADMIN])),
+    current_user: User = Depends(require_role([Role.ADMINISTRADOR, Role.COMPANY_ADMIN])),
     db: Session = Depends(get_db)
 ):
     """Listar usuarios (solo admins)."""
-    if current_user.role == Role.SYSTEM_ADMIN:
+    if current_user.role == Role.ADMINISTRADOR.value:
         users = db.query(User).offset(skip).limit(limit).all()
     else:
         users = db.query(User).filter(User.company_id == current_user.company_id).offset(skip).limit(limit).all()
@@ -42,7 +42,7 @@ async def get_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
     # Verificar acceso
-    if current_user.role != Role.SYSTEM_ADMIN and current_user.company_id != user.company_id:
+    if current_user.role != Role.ADMINISTRADOR.value and current_user.company_id != user.company_id:
         raise HTTPException(status_code=403, detail="Sin permisos")
     
     return user
@@ -52,7 +52,7 @@ async def get_user(
 async def update_user(
     user_id: int,
     user_update: UserUpdate,
-    current_user: User = Depends(require_role([Role.SYSTEM_ADMIN, Role.COMPANY_ADMIN])),
+    current_user: User = Depends(require_role([Role.ADMINISTRADOR, Role.COMPANY_ADMIN])),
     db: Session = Depends(get_db)
 ):
     """Actualizar usuario."""
@@ -61,7 +61,7 @@ async def update_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
     # Verificar acceso
-    if current_user.role != Role.SYSTEM_ADMIN and current_user.company_id != user.company_id:
+    if current_user.role != Role.ADMINISTRADOR.value and current_user.company_id != user.company_id:
         raise HTTPException(status_code=403, detail="Sin permisos")
     
     for key, value in user_update.dict(exclude_unset=True).items():

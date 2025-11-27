@@ -1,0 +1,301 @@
+-- ============================================
+-- PLATAFORMA DE CAPACITACIÓN - ESQUEMA COMPLETO DE BASE DE DATOS
+-- Archivo: database_schema.sql
+-- Descripción: Script SQL completo para crear todas las tablas, tipos ENUM, índices y extensión pgvector
+-- Ejecutar en: Supabase SQL Editor
+-- ============================================
+
+-- 1. HABILITAR EXTENSIÓN pgvector (para búsqueda vectorial)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 2. CREAR TIPOS ENUM
+-- Roles del sistema
+CREATE TYPE role_enum AS ENUM ('estudiante', 'profesor', 'administrador', 'company_admin');
+
+-- Tipos de documentos soportados
+CREATE TYPE document_type_enum AS ENUM ('pdf', 'docx', 'pptx', 'txt', 'video', 'audio');
+
+-- Tipos de eventos del calendario
+CREATE TYPE event_type_enum AS ENUM ('training', 'meeting', 'exam', 'deadline');
+
+-- Tipos de notificaciones
+CREATE TYPE notification_type_enum AS ENUM ('message', 'assignment', 'event', 'system');
+
+-- 3. CREAR TABLA companies (debe ir primero por las foreign keys)
+CREATE TABLE IF NOT EXISTS companies (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    description TEXT,
+    logo_url VARCHAR,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
+
+-- 4. CREAR TABLA users
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR UNIQUE NOT NULL,
+    hashed_password VARCHAR NOT NULL,
+    role role_enum NOT NULL DEFAULT 'student',
+    company_id INTEGER REFERENCES companies(id),
+    is_active BOOLEAN DEFAULT TRUE,
+    is_verified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id);
+
+-- 5. CREAR TABLA profiles
+CREATE TABLE IF NOT EXISTS profiles (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    first_name VARCHAR NOT NULL,
+    last_name VARCHAR NOT NULL,
+    phone VARCHAR,
+    position VARCHAR,
+    department VARCHAR,
+    avatar_url VARCHAR,
+    bio TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
+
+-- 6. CREAR TABLA courses
+CREATE TABLE IF NOT EXISTS courses (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    title VARCHAR NOT NULL,
+    description TEXT,
+    instructor_id INTEGER NOT NULL REFERENCES users(id),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_courses_company_id ON courses(company_id);
+CREATE INDEX IF NOT EXISTS idx_courses_instructor_id ON courses(instructor_id);
+
+-- 7. CREAR TABLA modules
+CREATE TABLE IF NOT EXISTS modules (
+    id SERIAL PRIMARY KEY,
+    course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    title VARCHAR NOT NULL,
+    description TEXT,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_modules_course_id ON modules(course_id);
+
+-- 8. CREAR TABLA documents
+CREATE TABLE IF NOT EXISTS documents (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    title VARCHAR NOT NULL,
+    file_path VARCHAR NOT NULL,
+    file_type document_type_enum NOT NULL,
+    file_size INTEGER NOT NULL,
+    mime_type VARCHAR,
+    extracted_text TEXT,
+    is_processed BOOLEAN DEFAULT FALSE,
+    is_indexed BOOLEAN DEFAULT FALSE,
+    uploaded_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_company_id ON documents(company_id);
+CREATE INDEX IF NOT EXISTS idx_documents_uploaded_by ON documents(uploaded_by);
+
+-- 9. CREAR TABLA module_contents
+CREATE TABLE IF NOT EXISTS module_contents (
+    id SERIAL PRIMARY KEY,
+    module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
+    content_type VARCHAR NOT NULL,
+    content TEXT,
+    document_id INTEGER REFERENCES documents(id),
+    "order" INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_module_contents_module_id ON module_contents(module_id);
+CREATE INDEX IF NOT EXISTS idx_module_contents_document_id ON module_contents(document_id);
+
+-- 10. CREAR TABLA enrollments
+CREATE TABLE IF NOT EXISTS enrollments (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    progress DOUBLE PRECISION DEFAULT 0.0,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    enrolled_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, course_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_enrollments_user_id ON enrollments(user_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_course_id ON enrollments(course_id);
+
+-- 11. CREAR TABLA quizzes
+CREATE TABLE IF NOT EXISTS quizzes (
+    id SERIAL PRIMARY KEY,
+    module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
+    title VARCHAR NOT NULL,
+    description TEXT,
+    passing_score DOUBLE PRECISION DEFAULT 18.0,
+    total_questions INTEGER DEFAULT 20,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_quizzes_module_id ON quizzes(module_id);
+
+-- 12. CREAR TABLA questions
+CREATE TABLE IF NOT EXISTS questions (
+    id SERIAL PRIMARY KEY,
+    quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    question_type VARCHAR DEFAULT 'multiple_choice',
+    correct_answer TEXT NOT NULL,
+    options TEXT,
+    points DOUBLE PRECISION DEFAULT 1.0,
+    "order" INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_questions_quiz_id ON questions(quiz_id);
+
+-- 13. CREAR TABLA attempts
+CREATE TABLE IF NOT EXISTS attempts (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+    score DOUBLE PRECISION NOT NULL,
+    is_passed BOOLEAN DEFAULT FALSE,
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_attempts_user_id ON attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_attempts_quiz_id ON attempts(quiz_id);
+
+-- 14. CREAR TABLA answers
+CREATE TABLE IF NOT EXISTS answers (
+    id SERIAL PRIMARY KEY,
+    attempt_id INTEGER NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
+    question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    answer_text TEXT NOT NULL,
+    is_correct BOOLEAN DEFAULT FALSE,
+    points_earned DOUBLE PRECISION DEFAULT 0.0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_answers_attempt_id ON answers(attempt_id);
+CREATE INDEX IF NOT EXISTS idx_answers_question_id ON answers(question_id);
+
+-- 15. CREAR TABLA chat_messages
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id SERIAL PRIMARY KEY,
+    sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receiver_id INTEGER REFERENCES users(id),
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_sender_id ON chat_messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_receiver_id ON chat_messages(receiver_id);
+
+-- 16. CREAR TABLA chat_logs
+CREATE TABLE IF NOT EXISTS chat_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    query TEXT NOT NULL,
+    response TEXT NOT NULL,
+    sources JSONB,
+    model_used VARCHAR,
+    tokens_used INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_logs_user_id ON chat_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_logs_company_id ON chat_logs(company_id);
+
+-- 17. CREAR TABLA events
+CREATE TABLE IF NOT EXISTS events (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR NOT NULL,
+    description TEXT,
+    event_type event_type_enum NOT NULL,
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    location VARCHAR,
+    is_all_day BOOLEAN DEFAULT FALSE,
+    reminder_sent BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_company_id ON events(company_id);
+CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id);
+CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time);
+
+-- 18. CREAR TABLA notifications
+CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    notification_type notification_type_enum NOT NULL,
+    title VARCHAR NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    link VARCHAR,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+
+-- ============================================
+-- FIN DEL SCRIPT
+-- ============================================
+-- 
+-- RESUMEN DE TABLAS CREADAS:
+-- 1. companies - Empresas (multi-tenant)
+-- 2. users - Usuarios del sistema
+-- 3. profiles - Perfiles extendidos de usuarios
+-- 4. courses - Cursos
+-- 5. modules - Módulos dentro de cursos
+-- 6. module_contents - Contenido de módulos
+-- 7. documents - Documentos procesados
+-- 8. enrollments - Inscripciones de usuarios a cursos
+-- 9. quizzes - Evaluaciones/Quizzes
+-- 10. questions - Preguntas de quizzes
+-- 11. attempts - Intentos de evaluación
+-- 12. answers - Respuestas en intentos
+-- 13. chat_messages - Mensajes de chat tradicional
+-- 14. chat_logs - Logs de chat con IA (RAG)
+-- 15. events - Eventos del calendario
+-- 16. notifications - Notificaciones del sistema
+--
+-- EXTENSIONES:
+-- - vector (pgvector) - Para búsqueda vectorial
+--
+-- TIPOS ENUM:
+-- - role_enum - Roles del sistema
+-- - document_type_enum - Tipos de documentos
+-- - event_type_enum - Tipos de eventos
+-- - notification_type_enum - Tipos de notificaciones
+--
+-- ============================================

@@ -16,7 +16,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
-    role = Column(SQLEnum(Role), nullable=False, default=Role.STUDENT)
+    # Usar String directamente en lugar de SQLEnum para evitar problemas de serialización
+    # El enum se valida en la aplicación, pero se guarda como string en la BD
+    role = Column(String, nullable=False, default=Role.ESTUDIANTE.value)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
@@ -28,7 +30,13 @@ class User(Base):
     company = relationship("Company", back_populates="users")
     enrollments = relationship("Enrollment", back_populates="user")
     attempts = relationship("Attempt", back_populates="user")
-    chat_messages = relationship("ChatMessage", back_populates="user")
+    # Especificar foreign_keys explícitamente porque ChatMessage tiene dos FK a users (sender_id y receiver_id)
+    # Usar lambda para evitar importaciones circulares y referenciar correctamente la columna
+    chat_messages = relationship(
+        "ChatMessage", 
+        back_populates="user", 
+        foreign_keys=lambda: [__import__("app.models.chat", fromlist=["ChatMessage"]).ChatMessage.sender_id]
+    )
     events = relationship("Event", back_populates="user")
 
 

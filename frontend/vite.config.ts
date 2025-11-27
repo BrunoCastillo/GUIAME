@@ -11,11 +11,24 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 5175,
     proxy: {
       '/api': {
         target: process.env.VITE_API_URL || 'http://localhost:8000',
         changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path, // No reescribir la ruta, mantener /api/v1/...
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('❌ Error en proxy:', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log('📤 Proxy request:', req.method, req.url);
+          });
+          proxy.on('proxyRes', (proxyRes, req, _res) => {
+            console.log('📥 Proxy response:', proxyRes.statusCode, req.url);
+          });
+        },
       },
     },
   },

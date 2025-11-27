@@ -41,7 +41,7 @@ class CompanyResponse(CompanyBase):
 @router.post("/", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
 async def create_company(
     company_data: CompanyCreate,
-    current_user: User = Depends(require_role([Role.SYSTEM_ADMIN])),
+    current_user: User = Depends(require_role([Role.ADMINISTRADOR])),
     db: Session = Depends(get_db)
 ):
     """Crear nueva empresa (solo system_admin)."""
@@ -56,11 +56,11 @@ async def create_company(
 async def get_companies(
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(require_role([Role.SYSTEM_ADMIN, Role.COMPANY_ADMIN])),
+    current_user: User = Depends(require_role([Role.ADMINISTRADOR, Role.COMPANY_ADMIN])),
     db: Session = Depends(get_db)
 ):
     """Listar empresas."""
-    if current_user.role == Role.SYSTEM_ADMIN:
+    if current_user.role == Role.ADMINISTRADOR.value:
         companies = db.query(Company).offset(skip).limit(limit).all()
     else:
         companies = db.query(Company).filter(Company.id == current_user.company_id).all()
@@ -80,7 +80,7 @@ async def get_company(
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
     
     # Verificar acceso
-    if current_user.role != Role.SYSTEM_ADMIN and current_user.company_id != company_id:
+    if current_user.role != Role.ADMINISTRADOR.value and current_user.company_id != company_id:
         raise HTTPException(status_code=403, detail="Sin permisos")
     
     return company

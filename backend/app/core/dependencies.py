@@ -55,7 +55,9 @@ def require_role(allowed_roles: list[Role]):
     Factory que retorna dependencia de autorización.
     """
     async def role_checker(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role not in allowed_roles:
+        # Comparar el valor del rol (string) con los valores de los roles permitidos
+        allowed_role_values = [role.value if isinstance(role, Role) else role for role in allowed_roles]
+        if current_user.role not in allowed_role_values:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tiene permisos suficientes"
@@ -74,7 +76,7 @@ def require_company_access():
         current_user: User = Depends(get_current_user),
         company_id: Optional[int] = None
     ) -> User:
-        if current_user.role == Role.SYSTEM_ADMIN:
+        if current_user.role == Role.ADMINISTRADOR.value:
             return current_user
         
         if company_id and current_user.company_id != company_id:
