@@ -12,6 +12,7 @@ from app.core.dependencies import get_current_user
 from app.core.enums import Role
 from app.models.user import User, Profile
 from app.schemas.user import LoginRequest, Token, UserCreate, UserResponse
+from pydantic import BaseModel
 from datetime import timedelta
 from app.core.config import settings
 
@@ -201,27 +202,51 @@ async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     Iniciar sesión.
     Retorna tokens de acceso y refresco.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=" * 50)
+    logger.info("Iniciando proceso de login")
+    logger.info(f"Email: {login_data.email}")
+    logger.info("=" * 50)
+    
     user = db.query(User).filter(User.email == login_data.email).first()
     
-    if not user or not verify_password(login_data.password, user.hashed_password):
+    if not user:
+        logger.warning(f"Usuario no encontrado: {login_data.email}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales inválidas"
+        )
+    
+    logger.info(f"Usuario encontrado: ID={user.id}, Email={user.email}, Role={user.role}, Activo={user.is_active}")
+    
+    if not verify_password(login_data.password, user.hashed_password):
+        logger.warning(f"Contraseña incorrecta para usuario: {login_data.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales inválidas"
         )
     
     if not user.is_active:
+        logger.warning(f"Intento de login de usuario inactivo: {login_data.email}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Usuario inactivo"
         )
     
     # Crear tokens
+    # JWT requiere que "sub" (subject) sea un string, convertir user.id a string
+    logger.info("Generando tokens de acceso...")
     access_token = create_access_token(
-        data={"sub": user.id, "role": user.role, "company_id": user.company_id}
+        data={"sub": str(user.id), "role": user.role, "company_id": user.company_id}
     )
     refresh_token = create_refresh_token(
-        data={"sub": user.id}
+        data={"sub": str(user.id)}
     )
+    
+    logger.info(f"✅ Login exitoso para usuario: {login_data.email}")
+    logger.info("=" * 50)
     
     return {
         "access_token": access_token,
@@ -248,7 +273,14 @@ async def refresh_token(
             detail="Token de refresco inválido"
         )
     
-    user_id = payload.get("sub")
+    user_id_str = payload.get("sub")
+    # Convertir user_id de string a int (JWT almacena "sub" como string)
+    if user_id_str is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de refresco inválido"
+        )
+    user_id = int(user_id_str)
     user = db.query(User).filter(User.id == user_id).first()
     
     if not user or not user.is_active:
@@ -258,11 +290,12 @@ async def refresh_token(
         )
     
     # Generar nuevos tokens
+    # JWT requiere que "sub" (subject) sea un string, convertir user.id a string
     access_token = create_access_token(
-        data={"sub": user.id, "role": user.role, "company_id": user.company_id}
+        data={"sub": str(user.id), "role": user.role, "company_id": user.company_id}
     )
     new_refresh_token = create_refresh_token(
-        data={"sub": user.id}
+        data={"sub": str(user.id)}
     )
     
     return {
@@ -276,4 +309,55 @@ async def refresh_token(
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Obtener información del usuario actual."""
     return current_user
+
+
+class ChangePasswordRequest(BaseModel):
+    """Esquema para cambio de contraseña."""
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(
+    password_data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Cambiar contraseña del usuario actual.
+    Requiere la contraseña actual para validar.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Verificar contraseña actual
+    if not verify_password(password_data.current_password, current_user.hashed_password):
+        logger.warning(f"Intento de cambio de contraseña con contraseña incorrecta para usuario: {current_user.email}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Contraseña actual incorrecta"
+        )
+    
+    # Validar que la nueva contraseña sea diferente
+    if password_data.current_password == password_data.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe ser diferente a la actual"
+        )
+    
+    # Validar longitud mínima de contraseña
+    if len(password_data.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe tener al menos 6 caracteres"
+        )
+    
+    # Actualizar contraseña
+    current_user.hashed_password = get_password_hash(password_data.new_password)
+    db.commit()
+    db.refresh(current_user)
+    
+    logger.info(f"✅ Contraseña actualizada exitosamente para usuario: {current_user.email}")
+    
+    return {"message": "Contraseña actualizada exitosamente"}
 

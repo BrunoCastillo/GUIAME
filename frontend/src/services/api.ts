@@ -5,8 +5,25 @@ import type { AxiosRequestConfig } from 'axios'
 // En desarrollo, usar ruta relativa para que funcione con el proxy de Vite
 // En producción, usar la URL absoluta si está configurada
 const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development'
-const API_URL = import.meta.env.VITE_API_URL || (isDevelopment ? '' : 'http://localhost:8000')
-const BASE_URL = isDevelopment ? '/api/v1' : `${API_URL}/api/v1`
+
+// Validar que VITE_API_URL sea una URL válida (no un token JWT)
+let envApiUrl = import.meta.env.VITE_API_URL
+if (envApiUrl && (envApiUrl.startsWith('eyJ') || envApiUrl.includes('eyJ') && !envApiUrl.startsWith('http'))) {
+  console.warn('⚠️ VITE_API_URL contiene un token JWT en lugar de una URL. Ignorando...')
+  envApiUrl = undefined
+}
+
+const API_URL = envApiUrl || (isDevelopment ? '' : 'http://localhost:8000')
+// FORZAR uso de ruta relativa en desarrollo para usar el proxy de Vite
+// Solo usar URL absoluta si VITE_API_URL es una URL válida (empieza con http)
+const BASE_URL = (isDevelopment && (!envApiUrl || !envApiUrl.startsWith('http'))) ? '/api/v1' : `${API_URL}/api/v1`
+
+console.log('🔧 Configuración API:', {
+  isDevelopment,
+  VITE_API_URL: envApiUrl || 'no configurado',
+  BASE_URL,
+  mode: import.meta.env.MODE
+})
 
 // Función para limpiar tokens malformados del localStorage
 function cleanInvalidTokens() {
@@ -17,13 +34,13 @@ function cleanInvalidTokens() {
       const authData = JSON.parse(authStorage)
       const token = authData?.state?.token
       
-      // Si el token es una URL, contiene localhost:5173, es un JWT muy largo, o contiene 'eyJ', limpiarlo
+      // Si el token es una URL, contiene localhost:5173, o es un JWT muy largo, limpiarlo
+      // NO rechazar tokens que contengan 'eyJ' porque los JWT válidos siempre lo contienen
       if (token && typeof token === 'string' && (
         token.startsWith('http://') || 
         token.startsWith('https://') || 
         token.includes('localhost:5173') ||
-        token.includes('eyJ') ||
-        token.length > 500
+        token.length > 2000  // Tokens JWT válidos pueden ser largos pero no más de 2000 caracteres
       )) {
         console.warn('🧹 Limpiando token inválido del localStorage:', token.substring(0, 50) + '...')
         localStorage.removeItem('auth-storage')
@@ -56,14 +73,21 @@ cleanInvalidTokens()
 // Función para limpiar tokens malformados de forma más agresiva
 function aggressiveTokenCleanup() {
   try {
-    // Limpiar auth-storage completamente si contiene tokens JWT
+    // Limpiar auth-storage solo si contiene tokens claramente inválidos (URLs, etc.)
+    // NO eliminar tokens JWT válidos que contengan 'eyJ'
     const authStorage = localStorage.getItem('auth-storage')
     if (authStorage) {
       const authData = JSON.parse(authStorage)
       const token = authData?.state?.token
-      if (token && typeof token === 'string' && token.includes('eyJ')) {
-        console.warn('🧹 LIMPIEZA AGRESIVA: Eliminando token JWT de Supabase del localStorage')
-        localStorage.removeItem('auth-storage')
+      if (token && typeof token === 'string') {
+        const isInvalid = token.startsWith('http://') || 
+                         token.startsWith('https://') || 
+                         token.includes('localhost:5173') ||
+                         token.length > 2000
+        if (isInvalid) {
+          console.warn('🧹 LIMPIEZA AGRESIVA: Eliminando token inválido del localStorage')
+          localStorage.removeItem('auth-storage')
+        }
       }
     }
   } catch (e) {
@@ -81,6 +105,9 @@ const axiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Configurar para preservar headers en redirects
+  maxRedirects: 5,
+  validateStatus: (status) => status < 500, // Permitir redirects (3xx)
 })
 
 // Wrapper para asegurar que el baseURL nunca se modifique
@@ -110,24 +137,47 @@ export const api = new Proxy(axiosInstance, {
   }
 })
 
+// Función helper para obtener el baseURL correcto
+function getForcedBaseURL() {
+  return (isDevelopment && !import.meta.env.VITE_API_URL) ? '/api/v1' : BASE_URL
+}
+
 // Interceptor para agregar token a las peticiones
 api.interceptors.request.use(
   (config: AxiosRequestConfig) => {
-    // PASO 1: ELIMINAR COMPLETAMENTE cualquier token JWT de Supabase del localStorage
-    // Esto debe hacerse ANTES de cualquier otra operación
+    // PASO 1: Limpiar tokens de Supabase y tokens inválidos
     try {
+      // Limpiar token de Supabase si existe
+      if (localStorage.getItem('supabase.auth.token')) {
+        console.warn('🧹 Limpiando token de Supabase del localStorage')
+        localStorage.removeItem('supabase.auth.token')
+      }
+      
       const authStorage = localStorage.getItem('auth-storage')
       if (authStorage) {
         try {
           const authData = JSON.parse(authStorage)
           const token = authData?.state?.token
-          // Si el token contiene 'eyJ' (JWT de Supabase), ELIMINAR TODO
-          if (token && typeof token === 'string' && token.includes('eyJ')) {
-            console.warn('🧹 Eliminando token JWT de Supabase del localStorage')
+          
+          // Si el token es un objeto (no string), es inválido - limpiar
+          if (token && typeof token !== 'string') {
+            console.warn('🧹 Eliminando auth-storage con token inválido (no es string):', typeof token)
             localStorage.removeItem('auth-storage')
+          } else if (token && typeof token === 'string') {
+            // Solo eliminar tokens que sean claramente inválidos (URLs, etc.)
+            const isInvalidToken = token.startsWith('http://') || 
+                                  token.startsWith('https://') || 
+                                  token.includes('localhost:5173') ||
+                                  (token.length > 2000)  // Tokens muy largos probablemente están malformados
+            
+            if (isInvalidToken) {
+              console.warn('🧹 Eliminando token inválido del localStorage:', token.substring(0, 50))
+              localStorage.removeItem('auth-storage')
+            }
           }
         } catch (e) {
-          // Si hay error al parsear, eliminar de todas formas
+          // Si hay error al parsear, limpiar
+          console.warn('⚠️ Error al parsear auth-storage, limpiando:', e)
           localStorage.removeItem('auth-storage')
         }
       }
@@ -136,14 +186,38 @@ api.interceptors.request.use(
     }
     
     // PASO 2: FORZAR baseURL correcto - SIEMPRE
-    config.baseURL = BASE_URL
+    // En desarrollo, SIEMPRE usar ruta relativa para el proxy de Vite
+    const forcedBaseURL = getForcedBaseURL()
+    config.baseURL = forcedBaseURL
+    if (config.baseURL !== forcedBaseURL) {
+      console.warn(`⚠️ baseURL fue modificado, forzando: ${forcedBaseURL}`)
+      config.baseURL = forcedBaseURL
+    }
     
     // PASO 3: Validar y corregir config.url si contiene tokens
     if (config.url) {
-      // Si la URL contiene un JWT token, extraer solo la ruta final
-      if (config.url.includes('eyJ')) {
-        console.error('❌ URL contiene token JWT. Limpiando...')
-        // Buscar la ruta después de /api/v1/
+      // Si la URL contiene un JWT token (empieza con 'eyJ'), es un token de Supabase malformado
+      // Extraer solo la ruta final o usar la ruta por defecto
+      if (config.url.startsWith('eyJ') || (config.url.includes('eyJ') && !config.url.startsWith('/'))) {
+        console.error('❌ URL contiene token JWT (probablemente de Supabase). Limpiando...')
+        console.error('❌ URL malformada:', config.url)
+        
+        // Limpiar tokens de Supabase del localStorage
+        try {
+          localStorage.removeItem('supabase.auth.token')
+          const authStorage = localStorage.getItem('auth-storage')
+          if (authStorage) {
+            const authData = JSON.parse(authStorage)
+            if (authData?.state?.token && typeof authData.state.token === 'object') {
+              console.warn('🧹 Limpiando auth-storage con token inválido (objeto)')
+              localStorage.removeItem('auth-storage')
+            }
+          }
+        } catch (e) {
+          console.error('Error limpiando tokens:', e)
+        }
+        
+        // Buscar la ruta después de /api/v1/ o usar la ruta por defecto
         const apiIndex = config.url.indexOf('/api/v1/')
         if (apiIndex !== -1) {
           config.url = config.url.substring(apiIndex + '/api/v1/'.length)
@@ -156,13 +230,13 @@ api.interceptors.request.use(
               break
             }
           }
-          // Si aún no encontramos nada, usar /auth/register como fallback
-          if (config.url.includes('eyJ')) {
-            config.url = '/auth/register'
+          // Si aún no encontramos nada, usar /auth/login como fallback (más común)
+          if (config.url.startsWith('eyJ') || config.url.includes('eyJ')) {
+            config.url = '/auth/login'
           }
         }
         // Forzar baseURL nuevamente
-        config.baseURL = BASE_URL
+        config.baseURL = getForcedBaseURL()
       }
     }
     
@@ -213,34 +287,73 @@ api.interceptors.request.use(
       config.headers = {}
     }
     
-    // PASO 5: Obtener token válido del localStorage (solo si no es un JWT de Supabase)
-    const authStorage = localStorage.getItem('auth-storage')
-    if (authStorage) {
-      try {
-        const authData = JSON.parse(authStorage)
-        const token = authData?.state?.token
-        
-        // Solo usar tokens que sean válidos (no JWT de Supabase, no URLs, no muy largos)
-        if (token && typeof token === 'string' && token.trim().length > 0) {
-          const isInvalid = token.startsWith('http://') || 
-                           token.startsWith('https://') || 
-                           token.includes('localhost:5173') || 
-                           token.includes('eyJ') || 
-                           token.length > 500
+    // PASO 5: Obtener token válido del localStorage (solo si no hay Authorization ya configurado)
+    // Respetar headers Authorization que se pasen manualmente (ej: en login)
+    const hasManualAuth = config.headers?.Authorization || 
+                          (config.headers as any)?.authorization
+    
+    if (!hasManualAuth) {
+      const authStorage = localStorage.getItem('auth-storage')
+      console.log(`🔍 [${config.url}] Verificando token. auth-storage existe: ${!!authStorage}`)
+      
+      if (authStorage) {
+        try {
+          const authData = JSON.parse(authStorage)
+          console.log(`🔍 [${config.url}] Estructura auth-storage:`, {
+            hasState: !!authData?.state,
+            hasToken: !!authData?.state?.token,
+            tokenLength: authData?.state?.token?.length || 0,
+            tokenPreview: authData?.state?.token?.substring(0, 20) || 'N/A'
+          })
           
-          if (!isInvalid) {
-            // Token válido de FastAPI, agregarlo a los headers
-            config.headers.Authorization = `Bearer ${token}`
+          const token = authData?.state?.token
+          
+          // Verificar que el token sea un string válido
+          // Si es un objeto, no es un token válido de FastAPI
+          if (!token || typeof token !== 'string') {
+            console.warn(`⚠️ [${config.url}] Token no es un string válido. Tipo: ${typeof token}`, token)
+            // Limpiar auth-storage si el token es inválido
+            if (token && typeof token === 'object') {
+              console.warn('🧹 Limpiando auth-storage con token inválido (objeto)')
+              localStorage.removeItem('auth-storage')
+            }
+          } else if (token.trim().length > 0) {
+            // Solo usar tokens que sean válidos (no URLs, no muy largos)
+            // Los tokens JWT válidos siempre comienzan con 'eyJ' (base64 de '{"'), así que NO rechazarlos
+            const isInvalid = token.startsWith('http://') || 
+                             token.startsWith('https://') || 
+                             token.includes('localhost:5173') || 
+                             token.length > 2000  // Tokens JWT pueden ser largos pero no más de 2000 caracteres
+            
+            if (!isInvalid) {
+              // Token válido de FastAPI, agregarlo a los headers
+              config.headers.Authorization = `Bearer ${token}`
+              console.log(`✅ [${config.url}] Token agregado al header Authorization (${token.length} chars)`)
+            } else {
+              console.warn(`⚠️ [${config.url}] Token inválido detectado:`, {
+                startsWithHttp: token.startsWith('http://'),
+                startsWithHttps: token.startsWith('https://'),
+                hasLocalhost: token.includes('localhost:5173'),
+                tooLong: token.length > 2000
+              })
+              // Limpiar token inválido
+              localStorage.removeItem('auth-storage')
+            }
           }
+        } catch (e) {
+          console.error('❌ Error parsing auth token:', e)
+          localStorage.removeItem('auth-storage')
         }
-      } catch (e) {
-        console.error('❌ Error parsing auth token:', e)
-        localStorage.removeItem('auth-storage')
+      } else {
+        console.warn(`⚠️ [${config.url}] No hay auth-storage en localStorage`)
       }
+    } else {
+      console.log(`✅ [${config.url}] Usando Authorization header manual`)
     }
     
     // PASO 6: VALIDACIÓN FINAL - Asegurar que baseURL y url sean correctos
-    config.baseURL = BASE_URL
+    // En desarrollo, SIEMPRE usar ruta relativa para el proxy de Vite
+    config.baseURL = getForcedBaseURL()
     
     // Si la URL aún contiene tokens después de todo, usar la ruta por defecto
     if (config.url && config.url.includes('eyJ')) {
@@ -257,12 +370,13 @@ api.interceptors.request.use(
     
     // PASO 7: Validación final ABSOLUTA del baseURL
     // Si el baseURL contiene tokens o está malformado, forzarlo nuevamente
+    const finalForcedBaseURL = getForcedBaseURL()
     if (!config.baseURL || 
         config.baseURL.includes('eyJ') || 
         config.baseURL.includes('localhost:5173') ||
-        config.baseURL !== BASE_URL) {
+        config.baseURL !== finalForcedBaseURL) {
       console.error('❌ baseURL malformado detectado. Forzando corrección final.')
-      config.baseURL = BASE_URL
+      config.baseURL = finalForcedBaseURL
     }
     
     // PASO 8: Validación final de la URL completa
@@ -284,8 +398,27 @@ api.interceptors.request.use(
       }
     }
     
-    // PASO 9: Última validación - asegurar que baseURL sea exactamente BASE_URL
-    config.baseURL = BASE_URL
+    // PASO 9: Última validación - asegurar que baseURL sea correcto
+    // En desarrollo, SIEMPRE usar ruta relativa para el proxy de Vite
+    config.baseURL = getForcedBaseURL()
+    
+    // PASO 10: Log final del header Authorization antes de enviar
+    const finalAuthHeader = config.headers?.Authorization || (config.headers as any)?.authorization
+    if (finalAuthHeader) {
+      console.log(`✅ [${config.url}] Header Authorization configurado: ${finalAuthHeader.substring(0, 30)}...`)
+    } else {
+      console.warn(`⚠️ [${config.url}] NO hay header Authorization configurado`)
+    }
+    
+    // PASO 11: Log de la URL completa que se enviará
+    const fullUrl = `${config.baseURL}${config.url}`
+    console.log(`🌐 [${config.method?.toUpperCase()}] URL completa: ${fullUrl}`)
+    console.log(`📋 Headers:`, {
+      Authorization: finalAuthHeader ? `${finalAuthHeader.substring(0, 30)}...` : 'NO HAY',
+      'Content-Type': config.headers?.['Content-Type'] || 'NO HAY',
+      baseURL: config.baseURL,
+      url: config.url
+    })
     
     return config
   },
@@ -294,14 +427,49 @@ api.interceptors.request.use(
   }
 )
 
-// Interceptor para manejar errores
+// Interceptor para manejar redirects y errores
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Si hay un redirect, los headers deberían preservarse automáticamente
+    if (response.status >= 300 && response.status < 400) {
+      console.log(`🔄 Redirect detectado: ${response.status} - ${response.config.url}`)
+    }
+    return response
+  },
   (error) => {
+    // Si el error es 401 después de un redirect, intentar reenviar con token
+    if (error.response?.status === 401 && error.config && !error.config._retry) {
+      const authStorage = localStorage.getItem('auth-storage')
+      if (authStorage) {
+        try {
+          const authData = JSON.parse(authStorage)
+          const token = authData?.state?.token
+          if (token && typeof token === 'string' && token.trim().length > 0) {
+            const isInvalid = token.startsWith('http://') || 
+                             token.startsWith('https://') || 
+                             token.includes('localhost:5173') || 
+                             token.length > 2000
+            if (!isInvalid) {
+              error.config._retry = true
+              error.config.headers = error.config.headers || {}
+              error.config.headers.Authorization = `Bearer ${token}`
+              console.log('🔄 Reintentando petición con token después de 401')
+              return api.request(error.config)
+            }
+          }
+        } catch (e) {
+          console.error('Error al procesar token en interceptor de error:', e)
+        }
+      }
+    }
+    
     if (error.response?.status === 401) {
-      // Token expirado o inválido
-      localStorage.removeItem('auth-storage')
-      window.location.href = '/login'
+      // Token expirado o inválido - solo redirigir si no es un retry
+      if (!error.config?._retry) {
+        console.log('❌ Token inválido o expirado, redirigiendo a login')
+        localStorage.removeItem('auth-storage')
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

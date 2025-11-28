@@ -14,12 +14,38 @@ export interface LoginResponse {
 
 export const authService = {
   async login(email: string, password: string): Promise<LoginResponse> {
+    console.log('🔐 Iniciando login para:', email)
     const response = await api.post('/auth/login', { email, password })
-    // Obtener información del usuario
-    const userResponse = await api.get('/auth/me')
-    return {
-      ...response.data,
-      user: userResponse.data,
+    console.log('✅ Login exitoso, token recibido')
+    console.log('📋 Token recibido (primeros 50 chars):', response.data.access_token?.substring(0, 50))
+    
+    const accessToken = response.data.access_token
+    if (!accessToken) {
+      throw new Error('No se recibió token de acceso')
+    }
+    
+    console.log('📤 Obteniendo información del usuario con token...')
+    console.log('📋 Header Authorization que se enviará:', `Bearer ${accessToken.substring(0, 20)}...`)
+    
+    // Obtener información del usuario usando el token directamente
+    // No podemos depender del localStorage porque aún no se ha guardado
+    try {
+      const userResponse = await api.get('/auth/me', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      })
+      console.log('✅ Información del usuario obtenida:', userResponse.data)
+      
+      return {
+        ...response.data,
+        user: userResponse.data,
+      }
+    } catch (error: any) {
+      console.error('❌ Error al obtener información del usuario:', error)
+      console.error('❌ Error response:', error.response?.data)
+      console.error('❌ Error status:', error.response?.status)
+      throw error
     }
   },
 

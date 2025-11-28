@@ -6,11 +6,15 @@ import Register from './pages/auth/Register'
 import Dashboard from './pages/Dashboard'
 import Courses from './pages/courses/Courses'
 import CourseDetail from './pages/courses/CourseDetail'
+import CreateCourse from './pages/courses/CreateCourse'
 import Chat from './pages/chat/Chat'
 import RAGChat from './pages/chat/RAGChat'
 import Calendar from './pages/Calendar'
 import Profile from './pages/Profile'
 import Documents from './pages/documents/Documents'
+import Companies from './pages/companies/Companies'
+import CreateCompany from './pages/companies/CreateCompany'
+import EditCompany from './pages/companies/EditCompany'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -31,12 +35,16 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/courses" element={<Courses />} />
+                  <Route path="/courses/create" element={<CreateCourse />} />
                   <Route path="/courses/:id" element={<CourseDetail />} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/rag" element={<RAGChat />} />
                   <Route path="/calendar" element={<Calendar />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/documents" element={<Documents />} />
+                  <Route path="/companies" element={<Companies />} />
+                  <Route path="/companies/create" element={<CreateCompany />} />
+                  <Route path="/companies/:id/edit" element={<EditCompany />} />
                 </Routes>
               </Layout>
             </PrivateRoute>

@@ -26,11 +26,30 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       login: async (email: string, password: string) => {
         const response = await authService.login(email, password)
+        console.log('💾 Guardando token en store:', {
+          hasToken: !!response.access_token,
+          tokenLength: response.access_token?.length || 0,
+          tokenPreview: response.access_token?.substring(0, 20) || 'N/A'
+        })
         set({
           user: response.user,
           token: response.access_token,
           isAuthenticated: true,
         })
+        // Verificar que se guardó correctamente
+        setTimeout(() => {
+          const stored = localStorage.getItem('auth-storage')
+          if (stored) {
+            const data = JSON.parse(stored)
+            console.log('✅ Token guardado en localStorage:', {
+              hasState: !!data?.state,
+              hasToken: !!data?.state?.token,
+              tokenLength: data?.state?.token?.length || 0
+            })
+          } else {
+            console.error('❌ Token NO se guardó en localStorage')
+          }
+        }, 100)
       },
       logout: () => {
         set({

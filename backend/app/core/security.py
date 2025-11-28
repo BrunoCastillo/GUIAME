@@ -69,10 +69,19 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
 
 def decode_token(token: str) -> Optional[Dict[str, Any]]:
     """Decodificar y validar token JWT."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info(f"🔍 Intentando decodificar token. SECRET_KEY length: {len(settings.SECRET_KEY) if settings.SECRET_KEY else 0}, ALGORITHM: {settings.ALGORITHM}")
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        logger.info(f"✅ Token decodificado exitosamente. Payload keys: {list(payload.keys())}")
         return payload
-    except JWTError:
+    except JWTError as e:
+        logger.error(f"❌ Error JWT al decodificar token: {type(e).__name__}: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Error inesperado al decodificar token: {type(e).__name__}: {str(e)}")
         return None
 
 
