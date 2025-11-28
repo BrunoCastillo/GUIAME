@@ -13,15 +13,31 @@ if (envApiUrl && (envApiUrl.startsWith('eyJ') || envApiUrl.includes('eyJ') && !e
   envApiUrl = undefined
 }
 
-const API_URL = envApiUrl || (isDevelopment ? '' : 'http://localhost:8000')
-// FORZAR uso de ruta relativa en desarrollo para usar el proxy de Vite
-// Solo usar URL absoluta si VITE_API_URL es una URL válida (empieza con http)
-const BASE_URL = (isDevelopment && (!envApiUrl || !envApiUrl.startsWith('http'))) ? '/api/v1' : `${API_URL}/api/v1`
+// Función para obtener el baseURL forzado
+const getForcedBaseURL = () => {
+  const viteApiUrl = import.meta.env.VITE_API_URL
+
+  // Validar si VITE_API_URL es un token JWT (empieza con 'eyJ' o contiene 'eyJ' sin ser una URL completa)
+  const isViteApiUrlJwt = typeof viteApiUrl === 'string' && 
+                          (viteApiUrl.startsWith('eyJ') || (viteApiUrl.includes('eyJ') && !viteApiUrl.startsWith('http')))
+
+  if (isDevelopment && (!viteApiUrl || isViteApiUrlJwt)) {
+    if (isViteApiUrlJwt) {
+      console.warn('⚠️ VITE_API_URL contiene un token JWT. Ignorando y usando proxy de Vite.')
+    } else if (!viteApiUrl) {
+      console.info('ℹ️ VITE_API_URL no definida en desarrollo. Usando proxy de Vite.')
+    }
+    return '/api/v1' // Usar ruta relativa para el proxy de Vite
+  }
+  return `${viteApiUrl || 'http://localhost:8000'}/api/v1` // Usar URL absoluta en producción o si VITE_API_URL es válida
+}
+
+const BASE_URL = getForcedBaseURL()
 
 console.log('🔧 Configuración API:', {
   isDevelopment,
-  VITE_API_URL: envApiUrl || 'no configurado',
-  BASE_URL,
+  VITE_API_URL: import.meta.env.VITE_API_URL || 'no configurado',
+  BASE_URL: getForcedBaseURL(),
   mode: import.meta.env.MODE
 })
 
@@ -101,7 +117,7 @@ aggressiveTokenCleanup()
 
 // Crear instancia de axios
 const axiosInstance = axios.create({
-  baseURL: BASE_URL,
+  baseURL: getForcedBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -118,14 +134,14 @@ export const api = new Proxy(axiosInstance, {
       return new Proxy(target.defaults, {
         get(defaultsTarget, defaultsProp) {
           if (defaultsProp === 'baseURL') {
-            return BASE_URL
+            return getForcedBaseURL()
           }
           return defaultsTarget[defaultsProp as keyof typeof defaultsTarget]
         },
         set(defaultsTarget, defaultsProp, value) {
           // Prevenir que baseURL sea modificado
           if (defaultsProp === 'baseURL') {
-            console.warn('⚠️ Intento de modificar baseURL bloqueado. Usando BASE_URL correcto.')
+            console.warn('⚠️ Intento de modificar baseURL bloqueado. Usando getForcedBaseURL() correcto.')
             return true
           }
           defaultsTarget[defaultsProp as keyof typeof defaultsTarget] = value
@@ -136,11 +152,6 @@ export const api = new Proxy(axiosInstance, {
     return target[prop as keyof typeof target]
   }
 })
-
-// Función helper para obtener el baseURL correcto
-function getForcedBaseURL() {
-  return (isDevelopment && !import.meta.env.VITE_API_URL) ? '/api/v1' : BASE_URL
-}
 
 // Interceptor para agregar token a las peticiones
 api.interceptors.request.use(
@@ -278,7 +289,7 @@ api.interceptors.request.use(
         
         // Asignar la URL limpia
         config.url = cleanUrl
-        config.baseURL = BASE_URL
+        config.baseURL = getForcedBaseURL()
       }
     }
     
@@ -381,7 +392,7 @@ api.interceptors.request.use(
     
     // PASO 8: Validación final de la URL completa
     // Construir la URL completa manualmente para asegurar que sea correcta
-    const finalBaseURL = config.baseURL || BASE_URL
+    const finalBaseURL = config.baseURL || getForcedBaseURL()
     const finalUrl = config.url || ''
     
     // Si la URL final aún contiene tokens, reconstruirla completamente

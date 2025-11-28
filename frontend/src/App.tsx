@@ -7,6 +7,10 @@ import Dashboard from './pages/Dashboard'
 import Courses from './pages/courses/Courses'
 import CourseDetail from './pages/courses/CourseDetail'
 import CreateCourse from './pages/courses/CreateCourse'
+import CreateModule from './pages/courses/modules/CreateModule'
+import EditModule from './pages/courses/modules/EditModule'
+import CreateModuleContent from './pages/courses/modules/CreateModuleContent'
+import EditModuleContent from './pages/courses/modules/EditModuleContent'
 import Chat from './pages/chat/Chat'
 import RAGChat from './pages/chat/RAGChat'
 import Calendar from './pages/Calendar'
@@ -37,6 +41,10 @@ function App() {
                   <Route path="/courses" element={<Courses />} />
                   <Route path="/courses/create" element={<CreateCourse />} />
                   <Route path="/courses/:id" element={<CourseDetail />} />
+                  <Route path="/courses/:id/modules/create" element={<CreateModule />} />
+                  <Route path="/courses/:id/modules/:moduleId/edit" element={<EditModule />} />
+                  <Route path="/courses/:id/modules/:moduleId/contents/create" element={<CreateModuleContent />} />
+                  <Route path="/courses/:id/modules/:moduleId/contents/:contentId/edit" element={<EditModuleContent />} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/rag" element={<RAGChat />} />
                   <Route path="/calendar" element={<Calendar />} />
