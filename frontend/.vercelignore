@@ -1,0 +1,31 @@
+# Archivos y directorios a ignorar en Vercel para Frontend
+
+# Node modules (ya se ignoran automáticamente)
+node_modules/
+
+# Archivos de desarrollo
+.env
+.env.local
+.env.*.local
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de test
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Archivos de build antiguos
+dist/
+build/
+

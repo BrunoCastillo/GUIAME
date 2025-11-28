@@ -103,13 +103,13 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str = ""
     
     # CORS - Permitir cualquier puerto de localhost para desarrollo
+    # En producción, se debe configurar como variable de entorno separada por comas
+    # Ejemplo: CORS_ORIGINS=https://tu-frontend.vercel.app,https://tu-dominio.com
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:5175",
         "http://localhost:3000",
-        "http://localhost:*",  # Permitir cualquier puerto de localhost
-        "http://127.0.0.1:*",   # Permitir cualquier puerto de 127.0.0.1
     ]
     # En desarrollo, permitir todos los orígenes de localhost
     # En producción, especificar los orígenes exactos

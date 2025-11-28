@@ -75,7 +75,11 @@ if settings.DEBUG or settings.ENVIRONMENT == "development":
     ]
 else:
     # En producción, usar solo los orígenes especificados
-    cors_origins = settings.CORS_ORIGINS
+    # Si CORS_ORIGINS está vacío o no está configurado, permitir todos (solo para desarrollo)
+    cors_origins = settings.CORS_ORIGINS if settings.CORS_ORIGINS else ["*"]
+    # Si es una lista con un solo elemento que contiene comas, dividirlo
+    if len(cors_origins) == 1 and "," in cors_origins[0]:
+        cors_origins = [origin.strip() for origin in cors_origins[0].split(",")]
 
 # Configurar CORS ANTES de otros middlewares
 app.add_middleware(

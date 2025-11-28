@@ -1,0 +1,51 @@
+# Archivos y directorios a ignorar en Vercel
+
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# Logs
+*.log
+logs/
+
+# Archivos de desarrollo
+.env
+.env.local
+.env.*.local
+
+# Archivos de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Node modules (ya se ignoran automáticamente)
+node_modules/
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de uploads (no se pueden usar en serverless)
+uploads/
+*.pdf
+*.docx
+*.pptx
+
+# Archivos de test
+test_*.py
+*_test.py
+tests/
+
+# Migraciones (ejecutar manualmente en Supabase)
+alembic/versions/*.py
+
